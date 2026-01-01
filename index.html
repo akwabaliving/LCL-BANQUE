@@ -88,12 +88,33 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
 
-        // CONFIGURATION
-        const firebaseConfig = JSON.parse(__firebase_config);
+        // --- CONFIGURATION FIREBASE ---
+        // Remplacez cet objet par votre propre configuration Firebase obtenue sur console.firebase.google.com
+        let firebaseConfig = {
+            apiKey: "VOTRE_API_KEY",
+            authDomain: "VOTRE_PROJET.firebaseapp.com",
+            projectId: "VOTRE_PROJET_ID",
+            storageBucket: "VOTRE_PROJET.appspot.com",
+            messagingSenderId: "VOTRE_ID",
+            appId: "VOTRE_APP_ID"
+        };
+
+        // Si nous sommes dans l'environnement de test, on récupère la config auto
+        if (typeof __firebase_config !== 'undefined') {
+            firebaseConfig = JSON.parse(__firebase_config);
+        }
+
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'lcl-fictif-web';
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        
+        // Initialisation sécurisée pour éviter la page blanche
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Erreur d'initialisation Firebase (Config manquante) :", e);
+        }
 
         // ÉTAT DES DONNÉES
         let state = {
@@ -255,7 +276,7 @@
                             </div>
                         </div>
                     ` : `
-                        <h2 class="text-2xl font-black text-[#00205B] mb-8">Mes contrats</h2>
+                        <h2 class="text-2xl font-black text-[#00205B] mb-8">Mes assurances</h2>
                         <div class="space-y-4">
                             <div class="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4">
                                 <div class="bg-blue-50 p-3 rounded-2xl text-[#00205B]"><i data-lucide="shield-check"></i></div>
@@ -418,7 +439,7 @@
         const pushNotification = (msg) => `
             <div id="push-notif" class="fixed top-6 left-1/2 transform -translate-x-1/2 z-[200] w-[92%] max-w-sm animate-push">
                 <div class="bg-white/95 backdrop-blur-xl rounded-[32px] p-5 shadow-2xl border border-gray-100 flex items-start gap-4">
-                    <div class="bg-blue-600 p-2.5 rounded-xl text-white">
+                    <div class="bg-blue-600 p-2.5 rounded-xl text-white text-center flex items-center justify-center">
                         <i data-lucide="info" class="w-6 h-6"></i>
                     </div>
                     <div class="flex-1">
@@ -519,7 +540,8 @@
         };
 
         const syncData = async () => {
-            if (!state.user) return;
+            // Ne tente de synchroniser que si Firebase est correctement configuré
+            if (!state.user || !db) return;
             try {
                 const docRef = doc(db, 'artifacts', appId, 'users', state.user.uid, 'data', 'account');
                 await setDoc(docRef, {
@@ -527,27 +549,29 @@
                     transactions: state.transactions,
                     notifications: state.notifications
                 });
-            } catch (err) { console.error(err); }
+            } catch (err) { console.error("Erreur de synchronisation :", err); }
         };
 
         // INITIALISATION
-        onAuthStateChanged(auth, (u) => {
-            if (u) {
-                state.user = u;
-                const docRef = doc(db, 'artifacts', appId, 'users', u.uid, 'data', 'account');
-                onSnapshot(docRef, (snap) => {
-                    if (snap.exists()) {
-                        const data = snap.data();
-                        state.balance = data.balance || state.balance;
-                        state.transactions = data.transactions || state.transactions;
-                        state.notifications = data.notifications || state.notifications;
-                        render();
-                    }
-                });
-            } else {
-                signInAnonymously(auth);
-            }
-        });
+        if (auth && db) {
+            onAuthStateChanged(auth, (u) => {
+                if (u) {
+                    state.user = u;
+                    const docRef = doc(db, 'artifacts', appId, 'users', u.uid, 'data', 'account');
+                    onSnapshot(docRef, (snap) => {
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            state.balance = data.balance || state.balance;
+                            state.transactions = data.transactions || state.transactions;
+                            state.notifications = data.notifications || state.notifications;
+                            render();
+                        }
+                    });
+                } else {
+                    signInAnonymously(auth);
+                }
+            });
+        }
 
         render();
     </script>
